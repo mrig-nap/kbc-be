@@ -10,7 +10,7 @@ const server = createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_URL,
+    origin: "*",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -39,7 +39,7 @@ app.get("/", (req, res) => {
 io.on("connection", (socket) => {
   console.log("Player connected -", socket.id)
 
-  socket.on("join-room", (playerName, socketId, roomID) => {
+  socket.on("join-room", (playerName, socketId, roomID, host) => {
     socket.join(roomID);
     players.push({
       id: generateRandomID(12),
@@ -49,7 +49,8 @@ io.on("connection", (socket) => {
       roomID: roomID,
       responseTime: 0,
       correct: 0,
-      totalQuestions: 0
+      totalQuestions: 0,
+      host: host
     })
     messages.push({ text: playerName + "  joined the server", sender: "System", roomID: roomID })
     io.to(roomID).emit("new-player-list", players.filter(player => player.roomID === roomID))
@@ -68,6 +69,9 @@ io.on("connection", (socket) => {
   })
 
   socket.on("send-message", message => {
+    if(message.text === "winner?"){
+      io.emit("toggle-winner")
+    }
     messages.push(message)
     io.emit("receive-message", messages)
   })
@@ -86,13 +90,24 @@ io.on("connection", (socket) => {
         item.totalQuestions = totalQuestions;
       } return item
     });
+    newPlayers.sort(function(a, b){return b.correct - a.correct});
     players.length = 0;
     players.push(...newPlayers)
     io.emit("new-player-list", players.filter(play => play.roomID === player.roomID))
     // io.to(player.roomID).emit("fff-response-update", fffResponse)
   })
 
+  socket.on("declare-fff-winner", player => {
+    messages.push({ text: "Congratulations! "+ player.name + " has been declared the winner of Fastest Finger First Round.", sender: "System", roomID: player.roomID })
+    io.to(player.roomID).emit("receive-message", messages.filter(msg => msg.roomID === player.roomID))
+  })
+
   socket.on("disconnect", () => {
+    //filter out player and update new players
+    const newPlayers = players.filter(player => player.socketId !== socket.id);
+    players.length = 0;
+    players.push(...newPlayers)
+    io.emit("new-player-list", players)
     console.log("Player Disconnected -" + socket.id)
   })
 })
