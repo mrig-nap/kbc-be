@@ -50,7 +50,8 @@ io.on("connection", (socket) => {
       responseTime: 0,
       correct: 0,
       totalQuestions: 0,
-      host: host
+      host: host,
+      fffWinner: false
     })
     messages.push({ text: playerName + "  joined the server", sender: "System", roomID: roomID })
     io.to(roomID).emit("new-player-list", players.filter(player => player.roomID === roomID))
@@ -69,11 +70,12 @@ io.on("connection", (socket) => {
   })
 
   socket.on("send-message", message => {
-    if(message.text === "winner?"){
-      io.emit("toggle-winner")
-    }
     messages.push(message)
     io.emit("receive-message", messages)
+  })
+
+  socket.on("declare-winner", (player) => { 
+    io.emit("toggle-winner", player)
   })
 
   socket.on("start-game", player => {
@@ -93,21 +95,35 @@ io.on("connection", (socket) => {
     newPlayers.sort(function(a, b){return b.correct - a.correct});
     players.length = 0;
     players.push(...newPlayers)
-    io.emit("new-player-list", players.filter(play => play.roomID === player.roomID))
+    io.to(player.roomID).emit("new-player-list", players.filter(play => play.roomID === player.roomID))
     // io.to(player.roomID).emit("fff-response-update", fffResponse)
   })
 
   socket.on("declare-fff-winner", player => {
+    player.fffWinner = true;
+    const newPlayers = players.map(item => {
+      if (item.id === player.id) {
+        return player
+      } return item
+    });
+    players.length = 0;
+    players.push(...newPlayers)
+    io.to(player.roomID).emit("new-player-list", players.filter(play => play.roomID === player.roomID))
     messages.push({ text: "Congratulations! "+ player.name + " has been declared the winner of Fastest Finger First Round.", sender: "System", roomID: player.roomID })
     io.to(player.roomID).emit("receive-message", messages.filter(msg => msg.roomID === player.roomID))
   })
 
+  socket.on("next-round", (roomID) => {
+    io.to(roomID).emit("next-round-started")
+  })
+
   socket.on("disconnect", () => {
-    //filter out player and update new players
-    const newPlayers = players.filter(player => player.socketId !== socket.id);
-    players.length = 0;
-    players.push(...newPlayers)
-    io.emit("new-player-list", players)
+    // const roomID = players.find(player => player.socketId === socket.id)?.roomID;
+    // //filter out player and update new players
+    // const newPlayers = players.filter(player => player.socketId !== socket.id && roomID === player.roomID);
+    // players.length = 0;
+    // players.push(...newPlayers)
+    // io.to(roomID).emit("new-player-list", players)
     console.log("Player Disconnected -" + socket.id)
   })
 })
